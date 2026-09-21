@@ -16,20 +16,31 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setInfoMessage(null);
     setLoading(true);
 
     if (mode === "signup") {
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: { data: { role, full_name: fullName } }
       });
       if (error) {
         setError(error.message);
+        setLoading(false);
+        return;
+      }
+      // Se o Supabase exige confirmação por e-mail, não existe sessão ainda.
+      // Nesse caso avisamos o usuário em vez de tentar redirecionar (o que travava a tela).
+      if (!data.session) {
+        setInfoMessage(
+          "Conta criada! Verifique seu e-mail (inclusive spam) e clique no link de confirmação antes de entrar."
+        );
         setLoading(false);
         return;
       }
@@ -115,6 +126,7 @@ export default function LoginPage() {
           </div>
 
           {error && <p className="text-sm text-brand-red">{error}</p>}
+          {infoMessage && <p className="text-sm text-brand-purple">{infoMessage}</p>}
 
           <button
             type="submit"
