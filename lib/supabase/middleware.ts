@@ -31,7 +31,8 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const path = request.nextUrl.pathname;
-  const isProtected = path.startsWith("/student") || path.startsWith("/teacher") || path.startsWith("/onboarding");
+  const isProtected =
+    path.startsWith("/student") || path.startsWith("/teacher") || path.startsWith("/onboarding") || path.startsWith("/pending");
   const isAuthPage = path.startsWith("/login");
 
   if (!user && isProtected) {
@@ -56,7 +57,7 @@ export async function updateSession(request: NextRequest) {
   if (user && (path.startsWith("/student") || path.startsWith("/teacher"))) {
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role")
+      .select("role, status")
       .eq("id", user.id)
       .single();
 
@@ -68,6 +69,27 @@ export async function updateSession(request: NextRequest) {
     if (profile?.role === "student" && path.startsWith("/teacher")) {
       const url = request.nextUrl.clone();
       url.pathname = "/student/dashboard";
+      return NextResponse.redirect(url);
+    }
+
+    // Aluno ainda não aprovado pela professora: bloqueia todas as telas de aluno
+    if (profile?.role === "student" && profile.status !== "approved" && path.startsWith("/student")) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/pending";
+      return NextResponse.redirect(url);
+    }
+  }
+
+  // Se já está aprovado e tenta abrir /pending, manda pro dashboard normal
+  if (user && path.startsWith("/pending")) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role, status")
+      .eq("id", user.id)
+      .single();
+    if (profile?.role === "teacher" || profile?.status === "approved") {
+      const url = request.nextUrl.clone();
+      url.pathname = profile?.role === "teacher" ? "/teacher/dashboard" : "/student/dashboard";
       return NextResponse.redirect(url);
     }
   }
