@@ -52,6 +52,27 @@ export default async function StudentDetailPage({
     .eq("teacher_id", user.id)
     .order("created_at", { ascending: false });
 
+  const { data: placement } = await supabase
+    .from("placement_tests")
+    .select("*")
+    .eq("student_id", params.id)
+    .maybeSingle();
+
+  async function saveSpeakingNotes(formData: FormData) {
+    "use server";
+    const supabase = createClient();
+    const {
+      data: { user }
+    } = await supabase.auth.getUser();
+    if (!user) return;
+    const notes = String(formData.get("speaking_notes") ?? "");
+    const placementId = String(formData.get("placement_id"));
+    await supabase
+      .from("placement_tests")
+      .update({ speaking_notes: notes, assigned_by: user.id })
+      .eq("id", placementId);
+    revalidatePath(`/teacher/students/${params.id}`);
+  }
   async function addNote(formData: FormData) {
     "use server";
     const supabase = createClient();
@@ -70,6 +91,15 @@ export default async function StudentDetailPage({
     const supabase = createClient();
     const level = String(formData.get("cefr_level"));
     await supabase.from("profiles").update({ cefr_level: level }).eq("id", params.id);
+    revalidatePath(`/teacher/students/${params.id}`);
+  }
+
+  async function sendNotification(formData: FormData) {
+    "use server";
+    const supabase = createClient();
+    const message = String(formData.get("message") ?? "").trim();
+    if (!message) return;
+    await supabase.from("notifications").insert({ profile_id: params.id, message });
     revalidatePath(`/teacher/students/${params.id}`);
   }
 
@@ -128,6 +158,64 @@ export default async function StudentDetailPage({
               {(notes ?? []).length === 0 && <p className="text-brand-ink/40">Nenhuma nota ainda.</p>}
             </ul>
           </div>
+        </div>
+
+        <div className="mt-6 rounded-xl2 border border-brand-ink/10 bg-white p-6">
+          <p className="mb-3 text-sm font-medium text-brand-ink/70">Enviar notificação para o aluno</p>
+          <form action={sendNotification} className="flex gap-2">
+            <input
+              name="message"
+              placeholder="Ex: Não esqueça de fazer a atividade de Writing até sexta!"
+              className="flex-1 rounded-lg border border-brand-ink/15 px-3 py-2 text-sm outline-none focus:border-brand-purple"
+            />
+            <button type="submit" className="rounded-full bg-brand-purple px-4 py-2 text-sm text-white">
+              Enviar
+            </button>
+          </form>
+        </div>
+
+        <div className="mt-6 rounded-xl2 border border-brand-ink/10 bg-white p-6">
+          <p className="mb-3 text-sm font-medium text-brand-ink/70">Teste de nivelamento (placement test)</p>
+          {placement ? (
+            <>
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div>
+                  <p className="text-xs text-brand-ink/50">Reading</p>
+                  <p className="font-display text-xl text-brand-ink">{Math.round(Number(placement.reading_score ?? 0))}%</p>
+                </div>
+                <div>
+                  <p className="text-xs text-brand-ink/50">Writing</p>
+                  <p className="font-display text-xl text-brand-ink">{Math.round(Number(placement.writing_score ?? 0))}%</p>
+                </div>
+                <div>
+                  <p className="text-xs text-brand-ink/50">Listening</p>
+                  <p className="font-display text-xl text-brand-ink">{Math.round(Number(placement.listening_score ?? 0))}%</p>
+                </div>
+              </div>
+              <p className="mt-3 text-center text-xs text-brand-ink/50">
+                Nível sugerido pelo teste: <span className="font-medium text-brand-purple">{placement.level_assigned}</span>
+              </p>
+
+              <form action={saveSpeakingNotes} className="mt-5">
+                <input type="hidden" name="placement_id" value={placement.id} />
+                <label className="mb-2 block text-xs font-medium text-brand-ink/70">
+                  Avaliação de Speaking (feita ao vivo por você)
+                </label>
+                <textarea
+                  name="speaking_notes"
+                  defaultValue={placement.speaking_notes ?? ""}
+                  rows={3}
+                  placeholder="Ex: Boa fluência, mas precisa trabalhar pronúncia de verbos irregulares."
+                  className="w-full rounded-lg border border-brand-ink/15 px-3 py-2 text-sm outline-none focus:border-brand-purple"
+                />
+                <button type="submit" className="mt-2 rounded-full bg-brand-purple px-4 py-2 text-sm text-white">
+                  Salvar avaliação
+                </button>
+              </form>
+            </>
+          ) : (
+            <p className="text-brand-ink/50">Este aluno ainda não fez o teste de nivelamento.</p>
+          )}
         </div>
 
         <div className="mt-6 rounded-xl2 border border-brand-ink/10 bg-white p-6">
