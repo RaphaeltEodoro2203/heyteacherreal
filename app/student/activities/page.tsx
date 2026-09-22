@@ -16,11 +16,15 @@ export default async function ActivitiesPage() {
 
   const { data: profile } = await supabase.from("profiles").select("cefr_level").eq("id", user.id).single();
 
-  const { data: activities } = await supabase
-    .from("activities")
-    .select("id, title, skill, level, book, unit_number, lesson_number")
-    .eq("level", profile?.cefr_level ?? "A1")
-    .order("unit_number");
+  const { data: assignments } = await supabase
+    .from("student_assignments")
+    .select("activity_id, activities(id, title, skill, level, book, unit_number, lesson_number)")
+    .eq("student_id", user.id);
+
+  const activities = (assignments ?? [])
+    .map((a: any) => a.activities)
+    .filter(Boolean)
+    .sort((a: any, b: any) => (a.unit_number ?? 0) - (b.unit_number ?? 0));
 
   const { data: attempts } = await supabase
     .from("activity_attempts")
@@ -66,7 +70,10 @@ export default async function ActivitiesPage() {
             );
           })}
           {(activities ?? []).length === 0 && (
-            <p className="text-brand-ink/50">Nenhuma atividade cadastrada para o seu nível ainda.</p>
+            <p className="text-brand-ink/50">
+              Sua professora ainda não liberou nenhuma atividade pra você. Assim que ela atribuir, elas
+              aparecem aqui automaticamente.
+            </p>
           )}
         </div>
       </main>
