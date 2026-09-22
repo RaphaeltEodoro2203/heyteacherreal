@@ -10,11 +10,13 @@ export function Sidebar({
   const studentLinks = [
     { href: "/student/dashboard", label: "Painel" },
     { href: "/student/activities", label: "Atividades" },
-    { href: "/student/profile", label: "Perfil" }
+    { href: "/student/profile", label: "Perfil" },
+    { href: "/notifications", label: "Notificações" }
   ];
   const teacherLinks = [
     { href: "/teacher/dashboard", label: "Alunos" },
-    { href: "/teacher/calendar", label: "Calendário" }
+    { href: "/teacher/calendar", label: "Calendário" },
+    { href: "/notifications", label: "Notificações" }
   ];
   const links = role === "student" ? studentLinks : teacherLinks;
 
