@@ -108,7 +108,15 @@ export default async function StudentDetailPage({
       <Sidebar role="teacher" active="/teacher/dashboard" />
       <main className="flex-1 px-8 py-8 md:px-12">
         <h1 className="font-display text-3xl text-brand-ink">{student.full_name}</h1>
-        <p className="mt-1 text-brand-ink/60">Nível CEFR: {student.cefr_level}</p>
+        <div className="mt-1 flex items-center justify-between">
+          <p className="text-brand-ink/60">Nível CEFR: {student.cefr_level}</p>
+          <a
+            href={`/teacher/students/${params.id}/assign`}
+            className="rounded-full bg-brand-purple px-4 py-2 text-sm text-white transition hover:bg-brand-lilacDark"
+          >
+            Atribuir atividades
+          </a>
+        </div>
 
         <div className="mt-8 grid gap-6 md:grid-cols-2">
           <div className="rounded-xl2 border border-brand-ink/10 bg-white p-6">
