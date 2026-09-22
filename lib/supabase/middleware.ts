@@ -32,7 +32,12 @@ export async function updateSession(request: NextRequest) {
 
   const path = request.nextUrl.pathname;
   const isProtected =
-    path.startsWith("/student") || path.startsWith("/teacher") || path.startsWith("/onboarding") || path.startsWith("/pending");
+    path.startsWith("/student") ||
+    path.startsWith("/teacher") ||
+    path.startsWith("/onboarding") ||
+    path.startsWith("/pending") ||
+    path.startsWith("/placement-test") ||
+    path.startsWith("/notifications");
   const isAuthPage = path.startsWith("/login");
 
   if (!user && isProtected) {
@@ -57,7 +62,7 @@ export async function updateSession(request: NextRequest) {
   if (user && (path.startsWith("/student") || path.startsWith("/teacher"))) {
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role, status")
+      .select("role, status, onboarding_completed")
       .eq("id", user.id)
       .single();
 
@@ -72,25 +77,60 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.redirect(url);
     }
 
-    // Aluno ainda não aprovado pela professora: bloqueia todas as telas de aluno
-    if (profile?.role === "student" && profile.status !== "approved" && path.startsWith("/student")) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/pending";
-      return NextResponse.redirect(url);
+    if (profile?.role === "student") {
+      // Aluno ainda não aprovado pela professora: bloqueia todas as telas de aluno
+      if (profile.status !== "approved" && path.startsWith("/student")) {
+        const url = request.nextUrl.clone();
+        url.pathname = "/pending";
+        return NextResponse.redirect(url);
+      }
+      // Aprovado mas ainda não fez o onboarding
+      if (profile.status === "approved" && !profile.onboarding_completed && path.startsWith("/student")) {
+        const url = request.nextUrl.clone();
+        url.pathname = "/onboarding";
+        return NextResponse.redirect(url);
+      }
+      // Onboarding feito mas ainda não fez o placement test
+      if (profile.status === "approved" && profile.onboarding_completed && path.startsWith("/student")) {
+        const { data: placement } = await supabase
+          .from("placement_tests")
+          .select("id")
+          .eq("student_id", user.id)
+          .maybeSingle();
+        if (!placement) {
+          const url = request.nextUrl.clone();
+          url.pathname = "/placement-test";
+          return NextResponse.redirect(url);
+        }
+      }
     }
   }
 
-  // Se já está aprovado e tenta abrir /pending, manda pro dashboard normal
-  if (user && path.startsWith("/pending")) {
+  // Se já está aprovado/completo e tenta abrir /pending, /onboarding ou /placement-test, manda pro dashboard
+  if (user && (path.startsWith("/pending") || path.startsWith("/onboarding") || path.startsWith("/placement-test"))) {
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role, status")
+      .select("role, status, onboarding_completed")
       .eq("id", user.id)
       .single();
-    if (profile?.role === "teacher" || profile?.status === "approved") {
+
+    if (profile?.role === "teacher") {
       const url = request.nextUrl.clone();
-      url.pathname = profile?.role === "teacher" ? "/teacher/dashboard" : "/student/dashboard";
+      url.pathname = "/teacher/dashboard";
       return NextResponse.redirect(url);
+    }
+
+    if (profile?.status === "approved") {
+      if (path.startsWith("/pending")) {
+        const url = request.nextUrl.clone();
+        url.pathname = profile.onboarding_completed ? "/student/dashboard" : "/onboarding";
+        return NextResponse.redirect(url);
+      }
+      if (path.startsWith("/onboarding") && profile.onboarding_completed) {
+        const url = request.nextUrl.clone();
+        url.pathname = "/student/dashboard";
+        return NextResponse.redirect(url);
+      }
     }
   }
 
