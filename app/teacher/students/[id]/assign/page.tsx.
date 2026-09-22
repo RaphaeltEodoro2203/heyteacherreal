@@ -1,0 +1,134 @@
+import { createClient } from "@/lib/supabase/server";
+import { redirect, notFound } from "next/navigation";
+import { Sidebar } from "@/components/Sidebar";
+import { revalidatePath } from "next/cache";
+
+const SKILL_LABEL: Record<string, string> = {
+  speaking: "Speaking", listening: "Listening", reading: "Reading", writing: "Writing"
+};
+
+export default async function AssignActivitiesPage({
+  params,
+  searchParams
+}: {
+  params: { id: string };
+  searchParams: { level?: string };
+}) {
+  const supabase = createClient();
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { data: student } = await supabase.from("profiles").select("full_name, cefr_level").eq("id", params.id).single();
+  if (!student) notFound();
+
+  const levelFilter = searchParams.level || student.cefr_level || "A1";
+
+  const { data: activities } = await supabase
+    .from("activities")
+    .select("id, title, skill, level, book, unit_number, lesson_number")
+    .eq("level", levelFilter)
+    .order("unit_number");
+
+  const { data: assigned } = await supabase
+    .from("student_assignments")
+    .select("activity_id")
+    .eq("student_id", params.id);
+  const assignedIds = new Set((assigned ?? []).map((a) => a.activity_id));
+
+  async function toggleAssignment(formData: FormData) {
+    "use server";
+    const supabase = createClient();
+    const {
+      data: { user }
+    } = await supabase.auth.getUser();
+    if (!user) return;
+    const activityId = String(formData.get("activity_id"));
+    const action = String(formData.get("action"));
+
+    if (action === "assign") {
+      await supabase.from("student_assignments").insert({
+        teacher_id: user.id,
+        student_id: params.id,
+        activity_id: activityId
+      });
+    } else {
+      await supabase
+        .from("student_assignments")
+        .delete()
+        .eq("student_id", params.id)
+        .eq("activity_id", activityId);
+    }
+    revalidatePath(`/teacher/students/${params.id}/assign`);
+  }
+
+  return (
+    <div className="flex min-h-screen">
+      <Sidebar role="teacher" active="/teacher/dashboard" />
+      <main className="flex-1 px-8 py-8 md:px-12">
+        <a href={`/teacher/students/${params.id}`} className="text-sm text-brand-purple hover:underline">
+          &larr; Voltar para {student.full_name}
+        </a>
+        <h1 className="mt-2 font-display text-3xl text-brand-ink">Atribuir atividades</h1>
+        <p className="mt-1 text-brand-ink/60">
+          Marque quais atividades {student.full_name} pode ver e fazer. Ele(a) só enxerga o que estiver marcado
+          aqui.
+        </p>
+
+        <div className="mt-6 flex gap-2 text-xs">
+          {["A1", "A2", "B1", "B2", "C1"].map((lvl) => (
+            <a
+              key={lvl}
+              href={`/teacher/students/${params.id}/assign?level=${lvl}`}
+              className={`rounded-full px-3 py-1.5 ${
+                levelFilter === lvl ? "bg-brand-purple text-white" : "bg-brand-cream text-brand-ink/60"
+              }`}
+            >
+              {lvl}
+            </a>
+          ))}
+        </div>
+
+        <div className="mt-6 space-y-3">
+          {(activities ?? []).map((activity) => {
+            const isAssigned = assignedIds.has(activity.id);
+            return (
+              <div
+                key={activity.id}
+                className={`flex items-center justify-between gap-4 rounded-xl2 border p-4 ${
+                  isAssigned ? "border-brand-purple/40 bg-brand-lilac/10" : "border-brand-ink/10 bg-white"
+                }`}
+              >
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-brand-lilacDark">
+                    {SKILL_LABEL[activity.skill]} · {activity.book ?? "Geral"}
+                    {activity.unit_number ? ` · Unidade ${activity.unit_number}` : ""}
+                  </p>
+                  <p className="font-medium text-brand-ink">{activity.title}</p>
+                </div>
+                <form action={toggleAssignment}>
+                  <input type="hidden" name="activity_id" value={activity.id} />
+                  <input type="hidden" name="action" value={isAssigned ? "unassign" : "assign"} />
+                  <button
+                    type="submit"
+                    className={`rounded-full px-4 py-1.5 text-sm ${
+                      isAssigned
+                        ? "border border-brand-red/40 text-brand-red hover:bg-brand-red/10"
+                        : "bg-brand-purple text-white hover:bg-brand-lilacDark"
+                    }`}
+                  >
+                    {isAssigned ? "Remover acesso" : "Liberar"}
+                  </button>
+                </form>
+              </div>
+            );
+          })}
+          {(activities ?? []).length === 0 && (
+            <p className="text-brand-ink/50">Nenhuma atividade cadastrada nesse nível ainda.</p>
+          )}
+        </div>
+      </main>
+    </div>
+  );
+}
